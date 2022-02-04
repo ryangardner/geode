@@ -572,7 +572,7 @@ public abstract class AbstractHitsMissesIntegrationTest implements RedisIntegrat
     runCommandAndAssertNoStatUpdates(STRING_INT_KEY, k -> jedis.setbit(k, 0L, "1"));
   }
 
-  /************* Set related commands *************/
+  /************* List related commands *************/
   @Test
   public void testLpush() {
     runCommandAndAssertNoStatUpdates(LIST_KEY, k -> jedis.lpush(k, "element"));
