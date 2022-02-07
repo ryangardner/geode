@@ -143,7 +143,7 @@ public class LPopDUnitTest {
 
 
   private void lpushPerformAndVerify(String key, List<String> elementList) {
-    jedis.lpush(key, elementList.toArray(new String[elementList.size()]));
+    jedis.lpush(key, elementList.toArray(new String[] {}));
 
     Long listLength = jedis.llen(key);
     assertThat(listLength).isEqualTo(elementList.size())

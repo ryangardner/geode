@@ -21,25 +21,32 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.Rule;
 import org.junit.Test;
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.JedisCluster;
 
-import org.apache.geode.redis.ConcurrentLoopingThreads;
 import org.apache.geode.test.dunit.rules.MemberVM;
 import org.apache.geode.test.dunit.rules.RedisClusterStartupRule;
+import org.apache.geode.test.junit.rules.ExecutorServiceRule;
 
 public class LPushDUnitTest {
 
   @ClassRule
   public static RedisClusterStartupRule clusterStartUp = new RedisClusterStartupRule();
 
-  private static final int LIST_SIZE = 1000;
+  @Rule
+  public ExecutorServiceRule executor = new ExecutorServiceRule();
+
+  private static final int MINIMUM_ITERATIONS = 10000;
   private static JedisCluster jedis;
 
   @BeforeClass
@@ -64,71 +71,54 @@ public class LPushDUnitTest {
   }
 
   @Test
-  public void shouldDistributeDataAmongCluster() {
+  public void lpush_ShouldPushMultipleElementsAtomically()
+      throws ExecutionException, InterruptedException {
+    final int pusherCount = 2;
+    final int pushListSize = 3;
+    AtomicLong runningCount = new AtomicLong(pusherCount);
     String key = "key";
+    List<String> elements1 = makeElementList(pushListSize, "element1-");
+    List<String> elements2 = makeElementList(pushListSize, "element2-");
 
-    List<String> elements = makeElementList(LIST_SIZE, "element1-");
+    Runnable task1 =
+        () -> lpushPerformAndVerify(key, elements1, runningCount);
+    Runnable task2 =
+        () -> lpushPerformAndVerify(key, elements2, runningCount);
+    Runnable task3 =
+        () -> verifyListLengthCondition(key, runningCount);
 
-    jedis.lpush(key, elements.toArray(new String[] {}));
+    Future<Void> future1 = executor.runAsync(task1);
+    Future<Void> future2 = executor.runAsync(task2);
+    Future<Void> future3 = executor.runAsync(task3);
 
-    List<String> result = getAllElements(key);
+    future1.get();
+    future2.get();
+    future3.get();
 
-    assertThat(result.toArray()).containsExactlyInAnyOrder(elements.toArray());
+    assertThat(jedis.llen(key)).isEqualTo(MINIMUM_ITERATIONS * pusherCount * pushListSize);
   }
 
-  @Test
-  public void shouldDistributeDataAmongCluster_givenConcurrentlyAddingDifferentDataToSameList() {
-    String key = "key";
-
-    List<String> elements1 = makeElementList(LIST_SIZE, "element1-");
-    List<String> elements2 = makeElementList(LIST_SIZE, "element2-");
-
-    List<String> allElements = new ArrayList<>();
-    allElements.addAll(elements1);
-    allElements.addAll(elements2);
-
-    new ConcurrentLoopingThreads(LIST_SIZE,
-        (i) -> jedis.lpush(key, elements1.get(i)),
-        (i) -> jedis.lpush(key, elements2.get(i))).runInLockstep();
-
-    List<String> results = getAllElements(key);
-
-    assertThat(results.toArray()).containsExactlyInAnyOrder(allElements.toArray());
-  }
-
-  @Test
-  public void shouldDistributeDataAmongCluster_givenConcurrentlyAddingDifferentLists() {
-    String key1 = "key1";
-    String key2 = "key2";
-
-    List<String> elements1 = makeElementList(LIST_SIZE, "element1-");
-    List<String> elements2 = makeElementList(LIST_SIZE, "element2-");
-
-    new ConcurrentLoopingThreads(LIST_SIZE,
-        (i) -> jedis.lpush(key1, elements1.get(i)),
-        (i) -> jedis.lpush(key2, elements2.get(i))).runInLockstep();
-
-    List<String> results1 = getAllElements(key1);
-    List<String> results2 = getAllElements(key2);
-
-    assertThat(results1.toArray()).containsExactlyInAnyOrder(elements1.toArray());
-    assertThat(results2.toArray()).containsExactlyInAnyOrder(elements2.toArray());
-
-  }
-
-  private List<String> makeElementList(int setSize, String baseString) {
-    List<String> elements = new ArrayList<>();
-    for (int i = 0; i < setSize; i++) {
-      elements.add(baseString + i);
+  private void lpushPerformAndVerify(String key, List<String> elementList,
+      AtomicLong runningCount) {
+    for (int i = 0; i < MINIMUM_ITERATIONS; i++) {
+      long listLength = jedis.llen(key);
+      long newLength = jedis.lpush(key, elementList.toArray(new String[] {}));
+      assertThat(newLength - listLength).isGreaterThanOrEqualTo(3);
+      assertThat((newLength - listLength) % 3).isEqualTo(0);
     }
-    return elements;
+    runningCount.decrementAndGet();
   }
 
-  private List<String> getAllElements(String key) {
+  private void verifyListLengthCondition(String key, AtomicLong runningCount) {
+    while (runningCount.get() > 0) {
+      assertThat(jedis.llen(key) % 3).isEqualTo(0);
+    }
+  }
+
+  private List<String> makeElementList(int listSize, String baseString) {
     List<String> elements = new ArrayList<>();
-    String element;
-    while ((element = jedis.lpop(key)) != null) {
-      elements.add(element);
+    for (int i = 0; i < listSize; i++) {
+      elements.add(baseString + i);
     }
     return elements;
   }
