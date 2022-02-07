@@ -588,14 +588,6 @@ public abstract class AbstractHitsMissesIntegrationTest implements RedisIntegrat
     runCommandAndAssertHitsAndMisses(LIST_KEY, k -> jedis.llen(k));
   }
 
-  /************* Set related commands *************/
-  // FYI - In Redis 5.x SPOP produces inconsistent results depending on whether a count was given
-  // or not. In Redis 6.x SPOP does not update any stats.
-  @Test
-  public void testSpop() {
-    runCommandAndAssertNoStatUpdates(SET_KEY, k -> jedis.spop(k));
-  }
-
   /************* Helper Methods *************/
   private void runCommandAndAssertHitsAndMisses(String key, Consumer<String> command) {
     Map<String, String> info = RedisTestHelper.getInfo(jedis);
