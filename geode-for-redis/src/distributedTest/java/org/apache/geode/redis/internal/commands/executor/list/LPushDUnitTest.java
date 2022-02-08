@@ -114,10 +114,11 @@ public class LPushDUnitTest {
     Long length;
     for (String key : keys) {
       length = jedis.llen(key);
-      assertThat(length).isEqualTo(MINIMUM_ITERATIONS * 2 * PUSH_LIST_SIZE);
+      assertThat(length).isGreaterThanOrEqualTo(MINIMUM_ITERATIONS * 2 * PUSH_LIST_SIZE);
       totalLength += length;
     }
-    assertThat(totalLength).isEqualTo(MINIMUM_ITERATIONS * PUSHER_COUNT * PUSH_LIST_SIZE);
+    assertThat(totalLength)
+        .isGreaterThanOrEqualTo(MINIMUM_ITERATIONS * PUSHER_COUNT * PUSH_LIST_SIZE);
   }
 
   private void lpushPerformAndVerify(String key, List<String> elementList,
