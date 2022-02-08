@@ -42,7 +42,6 @@ import org.apache.geode.test.junit.rules.ExecutorServiceRule;
 public class LPopDUnitTest {
   public static final int MINIMUM_ITERATIONS = 10000;
   private static MemberVM locator;
-  private static MemberVM server1;
 
   @ClassRule
   public static RedisClusterStartupRule clusterStartUp = new RedisClusterStartupRule();
@@ -61,7 +60,7 @@ public class LPopDUnitTest {
 
   @Before
   public void testSetup() {
-    server1 = clusterStartUp.startRedisVM(1, locator.getPort());
+    clusterStartUp.startRedisVM(1, locator.getPort());
     int redisServerPort = clusterStartUp.getRedisPort(1);
     jedis = new JedisCluster(new HostAndPort(BIND_ADDRESS, redisServerPort), REDIS_CLIENT_TIMEOUT);
     clusterStartUp.flushAll();
